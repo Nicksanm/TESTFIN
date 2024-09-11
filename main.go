@@ -6,6 +6,7 @@ import (
 
 	"net/http"
 
+	"github.com/go-chi/chi"
 	_ "modernc.org/sqlite"
 )
 
@@ -14,17 +15,19 @@ func main() {
 	defer db.Close()
 	datab := cases.NewDatab(db)
 	// Определяем путь к файлу базы данных через переменную окружения
+	r := chi.NewRouter()
 
-	http.Handle("/", http.FileServer(http.Dir("./web")))
+	r.Handle("/", http.FileServer(http.Dir("./web")))
 
 	// обработчики:
-	http.HandleFunc("/api/nextdate", handler.NextDateHandler)
+	r.HandleFunc("/api/nextdate", handler.NextDateHandler)
 
-	http.HandleFunc("POST /api/task", handler.PostTaskHandler(datab))
+	r.Post("/api/task", handler.PostTaskHandler(datab))
 
-	err := http.ListenAndServe(":7540", nil)
-	if err != nil {
+	// запускаем сервер
+	if err := http.ListenAndServe(":7540", r); err != nil {
 		panic(err)
+
 	}
 
 }

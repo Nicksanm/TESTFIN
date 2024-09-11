@@ -11,28 +11,24 @@ import (
 // обработчик POST "POST /api/task"
 func PostTaskHandler(datab cases.Datab) http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-		var task cases.Task
-		err := json.NewDecoder(req.Body).Decode(&task)
+		var t cases.Task
+		err := json.NewDecoder(req.Body).Decode(&t)
 		if err != nil {
-			http.Error(w, "ошибка десериализации JSON", http.StatusBadRequest)
+			http.Error(w, `{"error":"Ошибка десериализации JSON"}`, http.StatusBadRequest)
 			return
 		}
-		id, err := datab.AddTask(task)
+		id, err := datab.AddTask(t)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		reply := map[string]string{
-			"id": id,
-		}
-		res, err := json.Marshal(reply)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+
+		response := cases.Response{ID: id}
+
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, `{"error":"Ошибка кодирования JSON"}`, http.StatusInternalServerError)
 			return
 		}
-
-		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(res)
 	}
 }
