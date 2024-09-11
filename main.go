@@ -20,7 +20,7 @@ func main() {
 	// обработчики:
 	http.HandleFunc("/api/nextdate", handler.NextDateHandler)
 
-	http.HandleFunc("POST /api/task", handler.PostTaskHandler(datab))
+	http.HandleFunc("/api/task", handler.PostTaskHandler(datab))
 
 	err := http.ListenAndServe(":7540", nil)
 	if err != nil {
