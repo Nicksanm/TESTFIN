@@ -151,7 +151,7 @@ func (d *Datab) AddTask(task Task) (string, error) {
 	}
 
 	// Добавляем задачу в базу данных
-	query := `INSERT INTO scheduler (date, title, comment, repeat) VALUES (:date, :title, :comment, :repeat)`
+	query := `INSERT INTO scheduler (date, title, comment, repeat) VALUES ($1, $2, $3, $4)`
 	res, err := d.db.Exec(query, task.Date, task.Title, task.Comment, task.Repeat)
 	if err != nil {
 		return "", fmt.Errorf(`{"error":"Задача не добавлена"}`)

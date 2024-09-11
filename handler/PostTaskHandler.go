@@ -22,9 +22,7 @@ func PostTaskHandler(datab cases.Datab) http.HandlerFunc {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		reply := map[string]string{
-			"id": id,
-		}
+		reply := cases.Task{ID: id}
 		res, err := json.Marshal(reply)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -32,7 +30,6 @@ func PostTaskHandler(datab cases.Datab) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-		w.WriteHeader(http.StatusOK)
-		json.NewEncoder(w).Encode(res)
+		w.Write(res)
 	}
 }
