@@ -136,14 +136,14 @@ func (d *Datab) AddTask(task Task) (string, error) {
 
 	_, err = time.Parse(DateFormat, task.Date)
 	if err != nil {
-		return "", fmt.Errorf(`{"error":"Неверный формат даты"}`)
+		return "", fmt.Errorf("неверный формат даты")
 	}
 	// Если дата меньше time.Now, то устанавливаем NextDate
 	if task.Date < time.Now().Format(DateFormat) {
 		if task.Repeat != "" {
 			nextDate, err := NextDate(time.Now(), task.Date, task.Repeat)
 			if err != nil {
-				return "", fmt.Errorf(`{"error":"Неверное правило повторения"}`)
+				return "", fmt.Errorf("неверное правило повторения")
 			}
 			task.Date = nextDate
 		} else {
@@ -151,14 +151,14 @@ func (d *Datab) AddTask(task Task) (string, error) {
 		}
 	}
 	if task.Title == "" {
-		return "", fmt.Errorf(`{"error":"Не указан заголовок задачи"}`)
+		return "", fmt.Errorf("не указан заголовок задачи")
 	}
 
 	// Добавляем задачу в базу данных
 	query := `INSERT INTO scheduler (date, title, comment, repeat) VALUES ($1, $2, $3, $4)`
 	res, err := d.db.Exec(query, task.Date, task.Title, task.Comment, task.Repeat)
 	if err != nil {
-		return "", fmt.Errorf(`{"error":"Задача не добавлена"}`)
+		return "", fmt.Errorf("задача не добавлена")
 	}
 
 	//  Идентификатор созданной задачи
@@ -170,4 +170,177 @@ func (d *Datab) AddTask(task Task) (string, error) {
 	return fmt.Sprintf("%d", id), nil
 }
 
-// Получаем список ближайших задач
+// / Получаем список ближайших задач
+func (d *Datab) GetTasks(search string) ([]Task, error) {
+
+	var rows *sql.Rows
+	var err error
+
+	date, err := time.Parse("02.01.2006", search)
+	if err != nil {
+		log.Println("Поиск(текст)")
+
+		rows, err = d.db.Query(
+			`SELECT id, date, title, comment, repeat 
+			FROM scheduler
+			WHERE title LIKE :object OR comment LIKE :object
+			ORDER BY date LIMIT :limit`,
+			sql.Named("object", "%"+search+"%"),
+			sql.Named("limit", LimitTasks),
+		)
+	} else {
+		log.Println("Поиск(дата)")
+
+		object := date.Format("20060102")
+
+		rows, err = d.db.Query(
+			`SELECT id, date, title, comment, repeat
+			   FROM scheduler
+			   WHERE date LIKE :object
+			   ORDER BY date LIMIT :limit`,
+			sql.Named("object", "%"+object+"%"),
+			sql.Named("limit", LimitTasks),
+		)
+	}
+	if err != nil {
+		log.Println("задачу не найти", err)
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tasks []Task
+
+	for rows.Next() {
+		task := Task{}
+		err := rows.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	if len(tasks) == 0 {
+		tasks = []Task{}
+	}
+	if rows.Err() != nil {
+		return nil, rows.Err()
+	}
+
+	return tasks, nil
+}
+
+// Получение задачи по id
+func (d *Datab) GetTask(id string) (Task, error) {
+	var task Task
+	if id == "" {
+		return Task{}, fmt.Errorf("не указан id")
+	}
+	row := d.db.QueryRow("SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?", id)
+	err := row.Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+	if err != nil {
+		return Task{}, fmt.Errorf("задача не найдена")
+	}
+	return task, nil
+}
+
+// Редактирование задачи
+func (d *Datab) UpdateTask(task Task) error {
+	// проверяем поля в базе данных (id, date, title)
+	if task.ID == "" {
+		return fmt.Errorf("не указан идентификатор")
+	}
+	if task.Date == "" {
+		task.Date = time.Now().Format(DateFormat)
+	}
+
+	_, err := time.Parse(DateFormat, task.Date)
+	if err != nil {
+		return fmt.Errorf("неверный формат даты")
+	}
+	// Если дата меньше time.Now, то устанавливаем NextDate
+	if task.Date < time.Now().Format(DateFormat) {
+		if task.Repeat != "" {
+			nextDate, err := NextDate(time.Now(), task.Date, task.Repeat)
+			if err != nil {
+				return fmt.Errorf("неверное правило повторения")
+			}
+			task.Date = nextDate
+		} else {
+			task.Date = time.Now().Format(DateFormat)
+		}
+	}
+
+	if task.Title == "" {
+		return fmt.Errorf("не указан заголовок задачи")
+	}
+	/// что-то не так
+	// Обновляем задачу в базе данных
+	query := `UPDATE scheduler SET date=?, title=?, comment=?, repeat=? WHERE id=?`
+	res, err := d.db.Exec(query, task.Date, task.Title, task.Comment, task.Repeat, task.ID)
+	if err != nil {
+		return fmt.Errorf("ошибка в обновлении данных")
+	}
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("не удалось посчитать измененные строки")
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("задача с таким id не найдена")
+	}
+
+	log.Println("задача изменена")
+
+	return nil
+}
+
+// Выполнение задачи
+func (d *Datab) DoneTask(id string) error {
+	var task Task
+
+	task, err := d.GetTask(id)
+	if err != nil {
+		return err
+	}
+	// Одноразовая задача с пустым полем repeat удаляется
+	if task.Repeat == "" {
+
+		err := d.DeleteTask(id)
+		if err != nil {
+			return err
+		}
+
+	} else {
+		next, err := NextDate(time.Now(), task.Date, task.Repeat) // расчет следующей даты
+		if err != nil {
+			return err
+		}
+		task.Date = next //изменение у задачи значение Date
+		err = d.UpdateTask(task)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Удаление задачи из базы данных
+func (d *Datab) DeleteTask(id string) error {
+	if id == "" {
+		return fmt.Errorf("не указан id")
+	}
+	query := "DELETE FROM scheduler WHERE id = ?"
+	res, err := d.db.Exec(query, id)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить задачу")
+	}
+
+	rowsAffected, err := res.RowsAffected() // определяем измененные строки
+	if err != nil {
+		return fmt.Errorf("не удалось посчитать измененные строки")
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("задача с таким id не найдена")
+	}
+	return nil
+}

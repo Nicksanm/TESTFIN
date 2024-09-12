@@ -25,7 +25,7 @@ func PostTaskHandler(datab cases.Datab) http.HandlerFunc {
 
 		response := cases.Response{ID: id}
 
-		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 		if err := json.NewEncoder(w).Encode(response); err != nil {
 			http.Error(w, `{"error":"Ошибка кодирования JSON"}`, http.StatusInternalServerError)
 			return
